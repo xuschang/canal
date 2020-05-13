@@ -8,6 +8,8 @@ import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
+import com.alibaba.fastjson.JSONObject;
+import com.alibaba.otter.canal.protocol.FlatMessageCust;
 import org.apache.commons.lang.StringUtils;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
@@ -126,6 +128,33 @@ public class CanalKafkaProducer implements CanalMQProducer {
         }
     }
 
+    private List<JSONObject> convertMessage(List<FlatMessage> flatMessages){
+        List<JSONObject> flatMessageCusts = new ArrayList<>();
+        for(FlatMessage item:flatMessages){
+            if(item.getData().size()!=0) {
+                for (Map mp : item.getData()) {
+                    JSONObject node = new JSONObject();
+                    for(Object key:mp.keySet()){
+                        node.put((String)key,mp.get(key));
+                    }
+                    node.put("$operation",item.getType());
+                    node.put("$schema_name",item.getDatabase());
+                    node.put("$table_name",item.getTable());
+                    node.put("$timestamp",item.getTs());
+                    flatMessageCusts.add(node);
+                }
+            }else{
+                JSONObject node = new JSONObject();
+                node.put("$operation",item.getType());
+                node.put("$schema_name",item.getDatabase());
+                node.put("$table_name",item.getTable());
+                node.put("$timestamp",item.getTs());
+                flatMessageCusts.add(node);
+            }
+        }
+        return flatMessageCusts.size()==0?null:flatMessageCusts;
+    }
+
     private void send(MQProperties.CanalDestination canalDestination, String topicName, Message message)
                                                                                                         throws Exception {
         if (!kafkaProperties.getFlatMessage()) {
@@ -161,18 +190,26 @@ public class CanalKafkaProducer implements CanalMQProducer {
                         for (int i = 0; i < length; i++) {
                             FlatMessage flatMessagePart = partitionFlatMessage[i];
                             if (flatMessagePart != null) {
-                                records.add(new ProducerRecord<String, String>(topicName,
-                                    i,
-                                    null,
-                                    JSON.toJSONString(flatMessagePart, SerializerFeature.WriteMapNullValue)));
+                                List<FlatMessage> tmpList = new ArrayList<>();
+                                tmpList.add(flatMessagePart);
+                                List<JSONObject> tmpMessageParts = convertMessage(tmpList);
+                                for(JSONObject item:tmpMessageParts) {
+                                    records.add(new ProducerRecord<String, String>(topicName,
+                                            i,
+                                            null,
+                                            JSON.toJSONString(item, SerializerFeature.WriteMapNullValue)));
+                                }
                             }
                         }
                     } else {
                         final int partition = canalDestination.getPartition() != null ? canalDestination.getPartition() : 0;
-                        records.add(new ProducerRecord<String, String>(topicName,
-                            partition,
-                            null,
-                            JSON.toJSONString(flatMessage, SerializerFeature.WriteMapNullValue)));
+                        List<JSONObject> flatMessageCusts = convertMessage(flatMessages);
+                        for(JSONObject item:flatMessageCusts) {
+                            records.add(new ProducerRecord<String, String>(topicName,
+                                    partition,
+                                    null,
+                                    JSON.toJSONString(item, SerializerFeature.WriteMapNullValue)));
+                        }
                     }
 
                     // 每条记录需要flush
