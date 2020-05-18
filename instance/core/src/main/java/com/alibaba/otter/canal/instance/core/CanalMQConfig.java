@@ -7,6 +7,8 @@ public class CanalMQConfig {
     private Integer partitionsNum;
     private String  partitionHash;
     private String  dynamicTopic;
+    private String  rateLimit;
+    private String  kafkaJMXUrl;
 
     public String getTopic() {
         return topic;
@@ -46,5 +48,21 @@ public class CanalMQConfig {
 
     public void setDynamicTopic(String dynamicTopic) {
         this.dynamicTopic = dynamicTopic;
+    }
+
+    public String getRateLimit() {
+        return rateLimit;
+    }
+
+    public void setRateLimit(String rateLimit) {
+        this.rateLimit = rateLimit;
+    }
+
+    public String getKafkaJMXUrl() {
+        return kafkaJMXUrl;
+    }
+
+    public void setKafkaJMXUrl(String kafkaJMXUrl) {
+        this.kafkaJMXUrl = kafkaJMXUrl;
     }
 }

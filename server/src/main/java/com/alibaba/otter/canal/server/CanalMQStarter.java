@@ -1,5 +1,7 @@
 package com.alibaba.otter.canal.server;
 
+import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -20,6 +22,12 @@ import com.alibaba.otter.canal.protocol.Message;
 import com.alibaba.otter.canal.server.embedded.CanalServerWithEmbedded;
 import com.alibaba.otter.canal.spi.CanalMQProducer;
 
+import javax.management.MBeanServerConnection;
+import javax.management.ObjectName;
+import javax.management.remote.JMXConnector;
+import javax.management.remote.JMXConnectorFactory;
+import javax.management.remote.JMXServiceURL;
+
 public class CanalMQStarter {
 
     private static final Logger          logger         = LoggerFactory.getLogger(CanalMQStarter.class);
@@ -37,6 +45,16 @@ public class CanalMQStarter {
     private Map<String, CanalMQRunnable> canalMQWorks   = new ConcurrentHashMap<>();
 
     private static Thread                shutdownThread = null;
+
+    private long lastBytes = -1;
+
+    private long lastTime = -1;
+
+    private MBeanServerConnection kafkaConn = null;
+
+    private static final String BYTES_IN_PER_SEC = "kafka.server:type=BrokerTopicMetrics,name=BytesInPerSec";
+
+    private static final String MONITOR_TOPIC = ",topic=";
 
     public CanalMQStarter(CanalMQProducer canalMQProducer){
         this.canalMQProducer = canalMQProducer;
@@ -180,6 +198,27 @@ public class CanalMQStarter {
                     try {
                         int size = message.isRaw() ? message.getRawEntries().size() : message.getEntries().size();
                         if (batchId != -1 && size != 0) {
+
+
+                            //limit resord
+                            HashMap inputRate = getInputRate(kafkaConn,mqConfig.getTopic());
+                            boolean status = (boolean)inputRate.get("status");
+                            if(status){
+                                boolean flag = false;
+                                if(lastBytes != -1 && lastTime != -1)
+                                    while(true){
+                                        int rate = Integer.valueOf(mqConfig.getRateLimit());
+                                        if((rate*1.0/1000.0*((long)inputRate.get("time")-lastTime))<((long)inputRate.get("inbyte")-lastBytes)){
+                                            Thread.sleep(100);
+                                            inputRate = getInputRate(kafkaConn, mqConfig.getTopic());
+                                        }else{
+                                            break;
+                                        }
+                                    }
+                                lastBytes = (long)inputRate.get("inbyte");
+                                lastTime = (long)inputRate.get("time");
+                            }
+
                             canalMQProducer.send(canalDestination, message, new CanalMQProducer.Callback() {
 
                                 @Override
@@ -210,6 +249,29 @@ public class CanalMQStarter {
         }
     }
 
+    /**
+     * 得到JMX连接
+     * @param conn
+     * @param URL
+     * @return
+     */
+    private MBeanServerConnection getKafkaJMXConn(MBeanServerConnection conn, String URL){
+        String jmxURL = "service:jmx:rmi:///jndi/rmi://" + URL + "/jmxrmi";
+        try {
+            if (conn != null) {
+                return conn;
+            }
+            // 初始化连接jmx
+            JMXServiceURL serviceURL = new JMXServiceURL(jmxURL);
+            JMXConnector connector = JMXConnectorFactory.connect(serviceURL, null);
+            conn = connector.getMBeanServerConnection();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return conn;
+    }
+
     private class CanalMQRunnable implements Runnable {
 
         private String destination;
@@ -228,5 +290,32 @@ public class CanalMQStarter {
         public void stop() {
             running.set(false);
         }
+    }
+
+    /**
+     * kafka 发送速率控制
+     * @param conn
+     * @param topic
+     * @return
+     */
+    public static HashMap getInputRate(MBeanServerConnection conn, String topic){
+        HashMap object = new HashMap<>();
+        ObjectName bytesInPerSecObj = null;
+        Long beforeInBytes = -1L;
+        Long timeStamp = -1L;
+        boolean stauts = true;
+        try {
+            bytesInPerSecObj = new ObjectName(BYTES_IN_PER_SEC + MONITOR_TOPIC + topic);
+            beforeInBytes = (Long) conn.getAttribute(bytesInPerSecObj, "Count");
+            timeStamp = new Date().getTime();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        if(null ==  bytesInPerSecObj || -1 == beforeInBytes || -1 == timeStamp)
+            stauts = false;
+        object.put("status",stauts);
+        object.put("inbyte",beforeInBytes);
+        object.put("time",timeStamp);
+        return object;
     }
 }

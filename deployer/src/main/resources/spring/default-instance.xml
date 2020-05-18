@@ -200,5 +200,7 @@
 		<property name="partition" value="${canal.mq.partition}" />
 		<property name="partitionsNum" value="${canal.mq.partitionsNum}" />
 		<property name="partitionHash" value="${canal.mq.partitionHash}" />
+		<property name="rateLimit" value="${canal.instance.producer.rateLimit}"/>
+		<property name="kafkaJMXUrl" value="${canal.instance.producer.kafkaJMXUrl}"/>
 	</bean>
 </beans>
