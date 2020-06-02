@@ -137,18 +137,18 @@ public class CanalKafkaProducer implements CanalMQProducer {
                     for(Object key:mp.keySet()){
                         node.put((String)key,mp.get(key));
                     }
-                    node.put("$operation",item.getType());
-                    node.put("$schema_name",item.getDatabase());
-                    node.put("$table_name",item.getTable());
-                    node.put("$timestamp",item.getTs());
+                    node.put("v_operation",item.getType());
+                    node.put("v_schema_name",item.getDatabase());
+                    node.put("v_table_name",item.getTable());
+                    node.put("v_timestamp",item.getTs());
                     flatMessageCusts.add(node);
                 }
             }else{
                 JSONObject node = new JSONObject();
-                node.put("$operation",item.getType());
-                node.put("$schema_name",item.getDatabase());
-                node.put("$table_name",item.getTable());
-                node.put("$timestamp",item.getTs());
+                node.put("v_operation",item.getType());
+                node.put("v_schema_name",item.getDatabase());
+                node.put("v_table_name",item.getTable());
+                node.put("v_timestamp",item.getTs());
                 flatMessageCusts.add(node);
             }
         }
